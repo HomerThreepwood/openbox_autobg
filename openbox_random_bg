@@ -1,0 +1,87 @@
+#! /bin/bash
+#
+# Usage:
+# openbox_random_bg [--interval=minutes]
+#
+# -------------------------------------------------------------- FUNCTIONS ---
+function error {
+  echo "$@" >&2
+  exit 1
+  }
+
+function debug { :; }
+
+function change_background {
+ feh --bg-fill "$1"
+ }
+
+function load_images {
+  debug 'read source dir'
+  images=("$src"/*.jpg)
+  (( ${#images[@]} > 1 ))
+  }
+
+function pick_image {
+  local -i lastIndex="${randomIndex:--1}"
+  local -- attempt
+  # --- start ---
+  for attempt in 1 2 3
+  do (( randomIndex = RANDOM % ${#images[@]},
+        randomIndex != lastIndex )) && break
+  done
+  debug "last index:$lastIndex, new index:$randomIndex"
+  randomImage="${images[randomIndex]}"
+  }
+
+# -------------------------------------------------------------- VARIABLES ---
+declare -a images=()
+declare -i randomIndex  interval
+declare -- src="${HOME:?}/Pictures/Fractals"
+declare -- randomImage
+
+# ------------------------------------------------------------------ START ---
+
+# --- various checks ---
+[ -n "$DISPLAY" ] || error 'display variable is empty'
+command -v 'feh' &>/dev/null || error 'feh utility not found'
+[[ -d "$src" && -r "$src" ]] || error 'cannot access source dir'
+
+# --- parse command-line ---
+while (( $# ))
+do case "$1" in
+        '--debug')
+        function debug { echo "$@" >&2; }
+        debug 'debug is ON';;
+
+        '--interval='*)
+        [[ "$1" == '--interval='+([0-9]) ]] \
+        || error 'incorrect interval specification'
+        interval="${1#*=}";;
+
+        *) error 'incorrect usage';;
+   esac
+   shift
+done
+
+# --- load images from source dir ---
+load_images || error 'not enough jpg images'
+
+# --- change background once and exit if no interval ---
+if (( interval == 0 ))
+   then pick_image
+   debug "picked image: \"$randomImage\""
+   change_background "$randomImage" || error 'error while running feh'
+   exit 0
+fi
+
+# we're here because a non-zero interval has been specified ... Loop time!
+
+debug "interval:${interval}m"
+
+while :
+do [ -N "$src" ] && { load_images || error 'not enough jpg images'; }
+   pick_image
+   debug "picked image: \"$randomImage\""
+   change_background "$randomImage" || error 'error while running feh'
+   sleep "${interval}m"
+done
